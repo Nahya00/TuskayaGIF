@@ -20,11 +20,9 @@ ALLOWED_PATTERNS = [
 
 url_regex = re.compile(r'https?://[^\s]+')
 
-
 @bot.event
 async def on_ready():
     print(f"✅ Bot connecté en tant que {bot.user}")
-
 
 @bot.event
 async def on_message(message):
@@ -41,9 +39,18 @@ async def on_message(message):
                 except discord.Forbidden:
                     print("🚫 Permissions insuffisantes pour supprimer le message.")
                 break
+            elif "tenor.com" in url:
+                try:
+                    await message.delete()
+                    embed = discord.Embed(color=discord.Color.purple())
+                    embed.set_image(url=url)
+                    embed.set_footer(text=f"GIF partagé par {message.author.display_name}")
+                    await message.channel.send(embed=embed)
+                except discord.Forbidden:
+                    print("🚫 Permissions insuffisantes pour envoyer un embed.")
+                break
 
     await bot.process_commands(message)
-
 
 bot.run(TOKEN)
 
