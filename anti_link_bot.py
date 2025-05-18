@@ -1,13 +1,13 @@
 import discord
 from discord.ext import commands
 import re
+import os
 
-# Remplace ceci par ton token ou utilise une variable d'environnement
-TOKEN = 'TON_TOKEN_ICI'
+TOKEN = os.getenv("DISCORD_TOKEN")
 
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="§", intents=intents)
 
 ALLOWED_PATTERNS = [
     "tenor.com",
@@ -46,3 +46,4 @@ async def on_message(message):
 
 
 bot.run(TOKEN)
+
