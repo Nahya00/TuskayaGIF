@@ -11,21 +11,10 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="§", intents=intents)
 
-ALLOWED_PATTERNS = [
-    "tenor.com",
-    "youtube.com",
-    "youtu.be",
-    "spotify.com",
-    "soundcloud.com",
-    "deezer.com"
-]
-
 url_regex = re.compile(r'https?://[^\s]+')
-
 
 async def get_tenor_gif_url(url):
     async with aiohttp.ClientSession() as session:
-        # Extraire l'ID du GIF dans l'URL Tenor
         match = re.search(r'-([0-9]+)$', url)
         if not match:
             return None
@@ -40,11 +29,9 @@ async def get_tenor_gif_url(url):
                     return None
             return None
 
-
 @bot.event
 async def on_ready():
     print(f"✅ Bot connecté en tant que {bot.user}")
-
 
 @bot.event
 async def on_message(message):
@@ -54,14 +41,7 @@ async def on_message(message):
     urls = url_regex.findall(message.content)
     if urls:
         for url in urls:
-            if not any(pattern in url for pattern in ALLOWED_PATTERNS):
-                try:
-                    await message.delete()
-                    print(f"❌ Message supprimé de {message.author} contenant un lien interdit.")
-                except discord.Forbidden:
-                    print("🚫 Permissions insuffisantes pour supprimer le message.")
-                break
-            elif "tenor.com" in url:
+            if "tenor.com" in url:
                 try:
                     await message.delete()
                     gif_url = await get_tenor_gif_url(url)
