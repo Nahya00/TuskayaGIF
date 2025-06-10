@@ -46,7 +46,7 @@ async def on_message(message):
                     await message.delete()
                     gif_url = await get_tenor_gif_url(url)
                     if gif_url:
-                        embed = discord.Embed(color=discord.Color.purple())
+                        embed = discord.Embed(color=discord.Color.blue())
                         embed.set_image(url=gif_url)
                         embed.set_footer(text=f"GIF partagé par {message.author.display_name}")
                         await message.channel.send(embed=embed)
