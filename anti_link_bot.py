@@ -1,101 +1,51 @@
+# bot.py
+import discord
+import os
+import re
 
-import discord, os, re, aiohttp
-from io import BytesIO
-
-# ----- Configuration -----
-DOMAINS = ("tenor.com", "media.tenor.com", "giphy.com", "media.giphy.com")
-MAX_SIZE = 25 * 1024 * 1024  # 8 Mo
-
+# ─── configuration de base ────────────────────────────
 intents = discord.Intents.default()
 intents.messages = True
-intents.message_content = True
+intents.message_content = True          # nécessaire pour lire le contenu
+
 bot = discord.Client(intents=intents)
 
-URL_RE = re.compile(r"https?://\S+")
+GIF_DOMAINS = ("tenor.com", "giphy.com", "media.tenor.com", "media.giphy.com")
+URL_RE      = re.compile(r"https?://\S+")
 
-# -------------------------------------------------
-# Helpers
-# -------------------------------------------------
-async def fetch_bytes(url: str):
-    """Télécharge le contenu du fichier (<= MAX_SIZE)"""
-    async with aiohttp.ClientSession() as s:
-        try:
-            async with s.get(url, timeout=10) as r:
-                if r.status != 200:
-                    return None, None
-                data = await r.read()
-                if len(data) > MAX_SIZE:
-                    return None, None
-                ct = r.headers.get("content-type", "")
-                ext = ct.split("/")[-1].split(";")[0] or "gif"
-                return data, ext
-        except Exception:
-            return None, None
-
-def tenor_cdn(url: str):
-    """Convertit une URL tenor.com/... en media.tenor.com/<ID>/tenor.gif"""
-    gif_id = url.rstrip("/").split("-")[-1]
-    if gif_id.isdigit():
-        return f"https://media.tenor.com/{gif_id}/tenor.gif"
-    return url
-
-def giphy_cdn(url: str):
-    """Convertit giphy.com/... en media.giphy.com/media/<ID>/giphy.gif"""
-    parts = url.rstrip("/").split("-")
-    gif_id = parts[-1]
-    # ID giphy est souvent mélange de lettres/chiffres >= 5 car
-    if gif_id:
-        return f"https://media.giphy.com/media/{gif_id}/giphy.gif"
-    return url
-
-def to_cdn(url: str):
-    if "tenor.com" in url:
-        return tenor_cdn(url)
-    if "giphy.com" in url:
-        return giphy_cdn(url)
-    return url
-
-# -------------------------------------------------
-# Events
-# -------------------------------------------------
 @bot.event
 async def on_ready():
-    print("Connecté :", bot.user)
+    print(f"Bot connecté : {bot.user}")
 
 @bot.event
-async def on_message(message):
-    if message.author.bot:
+async def on_message(msg):
+    # ignore les bots et les messages sans lien
+    if msg.author.bot:
         return
-
-    match = URL_RE.search(message.content)
+    match = URL_RE.search(msg.content)
     if not match:
         return
 
-    link = match.group(0)
-    if not any(link.split("/")[2].endswith(d) for d in DOMAINS):
-        return  # lien pas concerné
+    url = match.group(0)
+    # on ne garde que Tenor / Giphy
+    if not any(url.split('/')[2].endswith(d) for d in GIF_DOMAINS):
+        return
 
-    cdn_url = to_cdn(link)
-    data, ext = await fetch_bytes(cdn_url)
-
+    # ── 1. supprime le message d'origine ─────────────────
     try:
-        await message.delete()
+        await msg.delete()              # le bot doit avoir "Gérer les messages"
     except discord.Forbidden:
         pass
 
-    embed = discord.Embed(description="\u200b", color=discord.Color.dark_blue())
-    embed.set_author(name=str(message.author), icon_url=message.author.display_avatar.url)
+    # ── 2. renvoie l'embed avec le GIF ───────────────────
+    embed = discord.Embed(description="\u200b",  # caractère invisible ⇒ cadre bleu
+                          color=discord.Color.dark_blue())
+    embed.set_author(name=str(msg.author),
+                     icon_url=msg.author.display_avatar.url)
+    embed.set_image(url=url)             # Discord affiche le GIF
 
-    files = None
-    if data:
-        fname = f"gif.{ext}"
-        file_obj = discord.File(BytesIO(data), filename=fname)
-        embed.set_image(url=f"attachment://{fname}")
-        files = [file_obj]
-    else:
-        embed.set_image(url=cdn_url)
+    await msg.channel.send(embed=embed)  # le bot doit avoir "Intégrer des liens"
 
-    await message.channel.send(embed=embed, files=files)
+# ─── lance le bot ──────────────────────────────────────
+bot.run(os.getenv("DISCORD_TOKEN"))
 
-if __name__ == "__main__":
-    bot.run(os.getenv("DISCORD_TOKEN"))
