@@ -1,8 +1,6 @@
 import discord
-import re
 import os
-import aiohttp
-from bs4 import BeautifulSoup
+import re
 
 intents = discord.Intents.default()
 intents.messages = True
@@ -10,76 +8,48 @@ intents.message_content = True
 
 bot = discord.Client(intents=intents)
 
-url_regex = re.compile(r'(https?://[^\s]+)')
-whitelist_domains = ["tenor.com", "media.tenor.com", "giphy.com", "media.giphy.com"]
-
-async def extract_direct_gif_url(url):
-    # Utilise BeautifulSoup pour extraire l’URL du GIF direct depuis Tenor
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(url) as resp:
-                if resp.status == 200:
-                    html = await resp.text()
-                    soup = BeautifulSoup(html, 'html.parser')
-                    gif_tag = soup.find("meta", property="og:image")
-                    if gif_tag:
-                        return gif_tag["content"]
-        except Exception as e:
-            print(f"Erreur d’extraction du GIF : {e}")
-    return None
+URL_RE = re.compile(r"https?://\S+")
+WHITELIST = ("tenor.com", "giphy.com", "media.tenor.com", "media.giphy.com")
 
 @bot.event
 async def on_ready():
-    print(f"Bot connecté en tant que {bot.user}")
+    print(f"Connecté : {bot.user}")
 
 @bot.event
-async def on_message(message):
-    if message.author.bot:
+async def on_message(msg):
+    if msg.author.bot:
         return
 
-    urls = url_regex.findall(message.content)
-    for url in urls:
-        domain = url.split('/')[2]
+    match = URL_RE.search(msg.content)
+    if not match:
+        return
 
-        if any(domain.endswith(allowed) for allowed in whitelist_domains):
-            try:
-                await message.delete()
+    url = match.group(0)
+    domain = url.split("/")[2]
 
-                embed = discord.Embed(
-                    description="**GIF détecté ✅**",
-                    color=discord.Color.dark_blue()
-                )
-                embed.set_author(
-                    name=str(message.author),
-                    icon_url=message.author.avatar.url if message.author.avatar else message.author.default_avatar.url
-                )
+    # ----- GIF autorisé -----
+    if domain.endswith(WHITELIST):
+        try:
+            await msg.delete()
+        except discord.Forbidden:
+            pass
 
-                gif_url = await extract_direct_gif_url(url)
-                if gif_url:
-                    embed.set_image(url=gif_url)
-                else:
-                    embed.description = "GIF détecté, mais non prévisualisable."
+        embed = discord.Embed(color=discord.Color.dark_blue())  # <- plus de description
+        embed.set_author(name=str(msg.author), icon_url=msg.author.display_avatar.url)
+        embed.set_image(url=url)
 
-                await message.channel.send(embed=embed)
-            except discord.Forbidden:
-                print("🚫 Permissions manquantes.")
-        else:
-            try:
-                await message.delete()
+        await msg.channel.send(embed=embed)
 
-                embed = discord.Embed(
-                    description="**Lien interdit supprimé.**",
-                    color=discord.Color.red()
-                )
-                embed.set_author(
-                    name=str(message.author),
-                    icon_url=message.author.avatar.url if message.author.avatar else message.author.default_avatar.url
-                )
-                await message.channel.send(embed=embed, delete_after=5)
-            except discord.Forbidden:
-                print("🚫 Permissions manquantes.")
-        break
+    # ----- Lien interdit -----
+    else:
+        try:
+            await msg.delete()
+        except discord.Forbidden:
+            pass
+        warn = discord.Embed(description="**Lien interdit supprimé.**",
+                             color=discord.Color.red())
+        warn.set_author(name=str(msg.author), icon_url=msg.author.display_avatar.url)
+        await msg.channel.send(embed=warn, delete_after=5)
 
 bot.run(os.getenv("DISCORD_TOKEN"))
-
 
