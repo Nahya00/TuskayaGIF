@@ -8,25 +8,22 @@ bot = discord.Client(intents=intents)
 URL_RE = re.compile(r"https?://\S+")
 WHITELIST = ("tenor.com", "giphy.com", "media.tenor.com", "media.giphy.com")
 
-async def get_gif(url: str) -> str | None:
-    """Retourne l’URL .gif directe via oEmbed (Tenor ou Giphy)."""
+async def direct_gif(url: str) -> str | None:
     if "tenor.com" in url:
-        oembed = f"https://tenor.com/oembed?url={url}"
+        api = f"https://tenor.com/oembed?url={url}"
     elif "giphy.com" in url:
-        oembed = f"https://giphy.com/services/oembed?url={url}"
+        api = f"https://giphy.com/services/oembed?url={url}"
     else:
         return None
 
     async with aiohttp.ClientSession() as s:
         try:
-            async with s.get(oembed, timeout=8) as r:
+            async with s.get(api, timeout=8) as r:
                 if r.status != 200:
                     return None
-                data = await r.json()
+                return (await r.json()).get("url")
         except Exception:
             return None
-
-    return data.get("url")            # champ “url” = vrai .gif
 
 @bot.event
 async def on_ready():
@@ -42,23 +39,23 @@ async def on_message(msg):
         return
 
     url = m.group(0)
-    domain = url.split("/")[2]
+    if not any(url.split("/")[2].endswith(d) for d in WHITELIST):
+        return                           # on ne gère que Tenor/Giphy
 
-    if not any(domain.endswith(d) for d in WHITELIST):
-        return            # on ne gère que Tenor / Giphy
+    gif_url = await direct_gif(url) or url
 
-    # récupère l’URL .gif directe
-    gif = await get_gif(url) or url   # fallback : lien d’origine
+    try:
+        await msg.delete()
+    except discord.Forbidden:
+        pass
 
-    # supprime le message de l’utilisateur
-    try: await msg.delete()
-    except discord.Forbidden: pass
-
-    # embed “propre”, sans description
-    embed = discord.Embed(color=discord.Color.dark_blue())
-    embed.set_author(name=str(msg.author),
-                     icon_url=msg.author.display_avatar.url)
-    embed.set_image(url=gif)
+    # ⬇️ Ajout d’un caractère invisible : l’embed aura son cadre complet
+    embed = discord.Embed(
+        description="\u200b",            # <- garde l’embed « plein » sans texte visible
+        color=discord.Color.dark_blue()
+    )
+    embed.set_author(name=str(msg.author), icon_url=msg.author.display_avatar.url)
+    embed.set_image(url=gif_url)
 
     await msg.channel.send(embed=embed)
 
