@@ -66,5 +66,5 @@ async def on_message(m):
 
     try:
         await m.delete()                       # nécessite “Gérer les messages”
-    excep
+    except
 
