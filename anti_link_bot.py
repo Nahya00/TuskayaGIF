@@ -8,25 +8,25 @@ bot = discord.Client(intents=intents)
 URL_RE = re.compile(r"https?://\S+")
 WHITELIST = ("tenor.com", "giphy.com", "media.tenor.com", "media.giphy.com")
 
-async def get_direct(url: str) -> str:
-    """Retourne l’URL GIF direct via oEmbed, ou l’URL d’origine."""
+async def get_gif(url: str) -> str | None:
+    """Retourne l’URL .gif directe via oEmbed (Tenor ou Giphy)."""
     if "tenor.com" in url:
         oembed = f"https://tenor.com/oembed?url={url}"
     elif "giphy.com" in url:
         oembed = f"https://giphy.com/services/oembed?url={url}"
     else:
-        return url
+        return None
 
     async with aiohttp.ClientSession() as s:
         try:
             async with s.get(oembed, timeout=8) as r:
                 if r.status != 200:
-                    return url
+                    return None
                 data = await r.json()
         except Exception:
-            return url
+            return None
 
-    return data.get("url", url)
+    return data.get("url")            # champ “url” = vrai .gif
 
 @bot.event
 async def on_ready():
@@ -42,21 +42,26 @@ async def on_message(msg):
         return
 
     url = m.group(0)
-    if not any(url.split("/")[2].endswith(d) for d in WHITELIST):
-        return  # on ne s’occupe que des GIF Tenor/Giphy
+    domain = url.split("/")[2]
 
-    direct = await get_direct(url)
+    if not any(domain.endswith(d) for d in WHITELIST):
+        return            # on ne gère que Tenor / Giphy
 
-    # supprime le message d’origine
-    try:
-        await msg.delete()
-    except discord.Forbidden:
-        pass
+    # récupère l’URL .gif directe
+    gif = await get_gif(url) or url   # fallback : lien d’origine
 
-    # le bot renvoie juste le lien => Discord fait l’aperçu tout seul
-    await msg.channel.send(f"{msg.author.mention} {direct}")
+    # supprime le message de l’utilisateur
+    try: await msg.delete()
+    except discord.Forbidden: pass
+
+    # embed “propre”, sans description
+    embed = discord.Embed(color=discord.Color.dark_blue())
+    embed.set_author(name=str(msg.author),
+                     icon_url=msg.author.display_avatar.url)
+    embed.set_image(url=gif)
+
+    await msg.channel.send(embed=embed)
 
 bot.run(os.getenv("DISCORD_TOKEN"))
-
 
 
