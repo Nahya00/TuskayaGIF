@@ -1,4 +1,4 @@
-import discord, os, re, aiohttp, json
+import discord, os, re, aiohttp
 
 intents = discord.Intents.default()
 intents.messages = True
@@ -6,14 +6,22 @@ intents.message_content = True
 bot = discord.Client(intents=intents)
 
 URL_RE = re.compile(r"https?://\S+")
-WHITELIST = ("tenor.com", "giphy.com", "media.tenor.com", "media.giphy.com")
+WHITELIST = ("tenor.com", "media.tenor.com")
+TENOR_KEY = os.getenv("TENOR_KEY")     # <-- ta clé
 
-async def direct_gif(url: str) -> str | None:
-    if "tenor.com" in url:
-        api = f"https://tenor.com/oembed?url={url}"
-    elif "giphy.com" in url:
-        api = f"https://giphy.com/services/oembed?url={url}"
-    else:
+async def tenor_direct(url: str) -> str | None:
+    """Extrait l’ID du GIF et appelle l’API Tenor pour un lien .gif direct."""
+    if not TENOR_KEY:
+        return None
+
+    # URL Tenor : https://tenor.com/view/xxx-<ID>
+    try:
+        gif_id = url.rstrip("/").split("-")[-1]
+        api = (
+            f"https://tenor.googleapis.com/v2/posts"
+            f"?ids={gif_id}&key={TENOR_KEY}&media_filter=gif"
+        )
+    except Exception:
         return None
 
     async with aiohttp.ClientSession() as s:
@@ -21,9 +29,17 @@ async def direct_gif(url: str) -> str | None:
             async with s.get(api, timeout=8) as r:
                 if r.status != 200:
                     return None
-                return (await r.json()).get("url")
+                data = await r.json()
         except Exception:
             return None
+
+    media = (
+        data.get("results", [{}])[0]
+            .get("media_formats", {})
+            .get("gif", {})
+            .get("url")
+    )
+    return media         # None si rien trouvé
 
 @bot.event
 async def on_ready():
@@ -37,28 +53,33 @@ async def on_message(msg):
     m = URL_RE.search(msg.content)
     if not m:
         return
-
     url = m.group(0)
-    if not any(url.split("/")[2].endswith(d) for d in WHITELIST):
-        return                           # on ne gère que Tenor/Giphy
+    domain = url.split("/")[2]
 
-    gif_url = await direct_gif(url) or url
+    if domain.endswith(WHITELIST):
+        # --- Tenor : passe par l’API pour le .gif direct ---
+        gif_url = await tenor_direct(url) or url
 
-    try:
-        await msg.delete()
-    except discord.Forbidden:
-        pass
+        try:
+            await msg.delete()
+        except discord.Forbidden:
+            pass
 
-    # ⬇️ Ajout d’un caractère invisible : l’embed aura son cadre complet
-    embed = discord.Embed(
-        description="\u200b",            # <- garde l’embed « plein » sans texte visible
-        color=discord.Color.dark_blue()
-    )
-    embed.set_author(name=str(msg.author), icon_url=msg.author.display_avatar.url)
-    embed.set_image(url=gif_url)
+        embed = discord.Embed(
+            description="\u200b",              # invisible → garde le cadre
+            color=discord.Color.dark_blue()
+        )
+        embed.set_author(
+            name=str(msg.author),
+            icon_url=msg.author.display_avatar.url
+        )
+        embed.set_image(url=gif_url)
 
-    await msg.channel.send(embed=embed)
+        await msg.channel.send(embed=embed)
+
+    else:
+        # Lien non autorisé → on ignore ou on supprime, à toi de voir
+        return
 
 bot.run(os.getenv("DISCORD_TOKEN"))
-
 
