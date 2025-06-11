@@ -1,30 +1,41 @@
-import discord, os, re, aiohttp, mimetypes
-from io import BytesIO
+import discord, os, re, aiohttp
 
-TOKEN      = os.getenv("DISCORD_TOKEN")
-TENOR_KEY  = os.getenv("TENOR_KEY")      # optionnel mais recommandé
-MAX_SIZE   = 25 * 1024 * 1024             # passe à 25 * 1024 * 1024 si Nitro
+# ─── Config ────────────────────────────────────────────────────────────
+TOKEN      = os.getenv("DISCORD_TOKEN")      # token du bot
+TENOR_KEY  = os.getenv("TENOR_KEY")          # ta clé Tenor v2
+INTENTS    = discord.Intents.default()
+INTENTS.messages = True
+INTENTS.message_content = True
 
-bot = discord.Client(intents=discord.Intents.all())
-URL_RE = re.compile(r"https?://\S+")
-ALLOWED = ("tenor.com", "giphy.com", "media.tenor.com", "media.giphy.com")
+bot = discord.Client(intents=INTENTS)
 
-# ───────────────────────── helpers ──────────────────────────
-async def tenor_api(url: str) -> str | None:
-    """Retourne le lien GIF via l’API officielle (si TENOR_KEY dispo)."""
-    if not TENOR_KEY:                     # pas de clé ➜ on saute
-        return None
+URL_RE    = re.compile(r"https?://\S+")
+WHITELIST = ("tenor.com", "media.tenor.com",   # Tenor
+             "giphy.com", "media.giphy.com")   # Giphy (laisse passer)
+
+# ─── Helper : lien .gif via API Tenor ──────────────────────────────────
+async def tenor_gif(url: str) -> str | None:
+    """Retourne le .gif direct depuis l’API Tenor ; None si échec."""
+    if not TENOR_KEY:
+        return None                           # pas de clé → on saute
+    # URL Tenor = …-<ID>   ⇒ on récupère l’ID numeric
     gif_id = url.rstrip("/").split("-")[-1]
-    api = (f"https://tenor.googleapis.com/v2/posts"
-           f"?ids={gif_id}&key={TENOR_KEY}&media_filter=gif")
+    if not gif_id.isdigit():
+        return None
+
+    api = (
+        f"https://tenor.googleapis.com/v2/posts"
+        f"?ids={gif_id}&key={TENOR_KEY}&media_filter=gif"
+    )
     async with aiohttp.ClientSession() as s:
         try:
             async with s.get(api, timeout=8) as r:
                 if r.status != 200:
                     return None
                 data = await r.json()
-        except Exception:                 # réseau down ↘
+        except Exception:
             return None
+
     return (
         data.get("results", [{}])[0]
             .get("media_formats", {})
@@ -32,66 +43,45 @@ async def tenor_api(url: str) -> str | None:
             .get("url")
     )
 
-def to_cdn(url: str) -> str:
-    """Construit un lien CDN ‘.gif’ simple pour Tenor/Giphy."""
-    if "tenor.com" in url and url.split("-")[-1].isdigit():
-        gif_id = url.rstrip("/").split("-")[-1]
-        return f"https://media.tenor.com/{gif_id}/tenor.gif"
-    if "giphy.com" in url:
-        gif_id = url.rstrip("/").split("-")[-1]
-        return f"https://media.giphy.com/media/{gif_id}/giphy.gif"
-    return url
-
-async def fetch(url: str):
-    """Télécharge si content-type image/gif + ≤ MAX_SIZE."""
-    async with aiohttp.ClientSession() as s:
-        try:
-            async with s.get(url, timeout=10) as r:
-                if r.status != 200:
-                    return None, None
-                ct = r.headers.get("content-type", "")
-                if not ct.startswith(("image/", "video/")):  # évite HTML
-                    return None, None
-                data = await r.read()
-                if len(data) > MAX_SIZE:
-                    return None, None
-                ext = mimetypes.guess_extension(ct.split(";")[0]) or ".gif"
-                return data, ext.lstrip(".")
-        except Exception:
-            return None, None
-
-# ───────────────────────── events ───────────────────────────
+# ─── Events ────────────────────────────────────────────────────────────
 @bot.event
-async def on_message(m):
-    if m.author.bot:
+async def on_ready():
+    print("Connecté :", bot.user)
+
+@bot.event
+async def on_message(msg):
+    if msg.author.bot:
         return
 
-    match = URL_RE.search(m.content)
-    if not match:
-        return
-    url = match.group(0)
-    if not any(url.split("/")[2].endswith(d) for d in ALLOWED):
+    m = URL_RE.search(msg.content)
+    if not m:
         return
 
-    # 1️⃣ essaie API Tenor (fiable)
-    direct = await tenor_api(url) or to_cdn(url)
+    url = m.group(0)
+    domain = url.split("/")[2]
 
-    # 2️⃣ télécharge
-    data, ext = await fetch(direct)
-    await m.delete()
+    # ─── Lien Tenor / Giphy autorisé ────────────────────────────────
+    if domain.endswith(WHITELIST):
 
-    embed = discord.Embed(description="\u200b", color=discord.Color.dark_blue())
-    embed.set_author(name=str(m.author), icon_url=m.author.display_avatar.url)
+        # Si Tenor → essaie d’obtenir le .gif via l’API
+        direct_url = await tenor_gif(url) if "tenor.com" in domain else url
+        direct_url = direct_url or url   # fallback
 
-    files = None
-    if data:
-        fname = f"gif.{ext}"
-        files = [discord.File(BytesIO(data), filename=fname)]
-        embed.set_image(url=f"attachment://{fname}")
-    else:                      # encore un raté ➜ lien direct (meilleur effort)
-        embed.set_image(url=direct)
+        try:
+            await msg.delete()
+        except discord.Forbidden:
+            pass
 
-    await m.channel.send(embed=embed, files=files)
+        embed = discord.Embed(description="\u200b",   # invisible → cadre bleu
+                              color=discord.Color.dark_blue())
+        embed.set_author(name=str(msg.author),
+                         icon_url=msg.author.display_avatar.url)
+        embed.set_image(url=direct_url)
+
+        await msg.channel.send(embed=embed)
+
+    # ─── Autres liens → tu peux les supprimer ou les ignorer ──────────
+    else:
+        return
 
 bot.run(TOKEN)
-
