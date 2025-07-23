@@ -38,7 +38,7 @@ async def on_message(msg):
     if direct_url:
         # Envoie le GIF sous forme d'URL dans le chat sans afficher le lien brut
         embed = discord.Embed(
-            title=f"{msg.author.name} a partagé un GIF !",
+            title=f"{msg.author.name} a partagé un GIF !", 
             description=f"Voici le GIF envoyé par {msg.author.name}:",
             color=discord.Color.blue()
         )
