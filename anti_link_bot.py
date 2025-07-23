@@ -1,7 +1,7 @@
 import discord
 import os
 import re
-import aiohttp  # Pour envoyer des requêtes HTTP asynchrones à l'API Tenor
+import aiohttp  # Pour les requêtes HTTP asynchrones à l'API Tenor
 
 # Récupère la clé API Tenor depuis tes variables d'environnement
 TENOR_API_KEY = os.getenv("TENOR_API_KEY")
@@ -19,13 +19,6 @@ bot = discord.Client(intents=intents)
 
 # Expression régulière pour attraper les URLs
 URL_RE = re.compile(r"https?://\S+")
-
-# Fonction pour vérifier si l'URL est un GIF valide (se termine par .gif)
-async def get_direct_gif(url: str) -> str | None:
-    """Vérifie si l'URL est un GIF valide (se termine par .gif)."""
-    if url.endswith(".gif"):
-        return url
-    return None
 
 # Fonction pour récupérer un GIF depuis Tenor via une recherche
 async def get_gif_from_tenor(search_term: str) -> str:
@@ -62,7 +55,7 @@ async def on_message(msg):
         embed = discord.Embed(
             title=f"{msg.author.name} a partagé un GIF !",
             description=f"Voici le GIF envoyé par {msg.author.name}:",
-            color=discord.Color.blue()  # Choix de couleur pour l'embed
+            color=discord.Color.black()  # Choix de couleur pour l'embed
         )
         embed.set_image(url=direct_url)  # Ajoute le GIF à l'embed
         embed.set_footer(text=f"Envoyé par {msg.author.name}", icon_url=msg.author.avatar.url)  # Ajouter l'avatar de l'utilisateur
@@ -80,7 +73,7 @@ async def on_message(msg):
             embed = discord.Embed(
                 title=f"{msg.author.name} a partagé un GIF de Tenor !",
                 description=f"Voici un GIF envoyé par {msg.author.name}:",
-                color=discord.Color.blue()  # Choix de couleur pour l'embed
+                color=discord.Color.black()  # Choix de couleur pour l'embed
             )
             embed.set_image(url=tenor_gif)  # Ajoute le GIF Tenor à l'embed
             embed.set_footer(text=f"Envoyé par {msg.author.name}", icon_url=msg.author.avatar.url)  # Ajouter l'avatar de l'utilisateur
