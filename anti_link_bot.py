@@ -1,7 +1,7 @@
 import discord
 import os
 import re
-import aiohttp  # Pour les requêtes HTTP asynchrones à l'API Tenor
+import aiohttp  # Pour envoyer des requêtes HTTP asynchrones à l'API Tenor
 
 # Récupère la clé API Tenor depuis tes variables d'environnement
 TENOR_API_KEY = os.getenv("TENOR_API_KEY")
@@ -20,6 +20,14 @@ bot = discord.Client(intents=intents)
 # Expression régulière pour attraper les URLs
 URL_RE = re.compile(r"https?://\S+")
 
+# Fonction pour vérifier si l'URL est un GIF valide (se termine par .gif)
+async def get_direct_gif(url: str) -> str | None:
+    """Vérifie si l'URL est un GIF valide (se termine par .gif)."""
+    if url.endswith(".gif"):
+        return url
+    return None
+
+# Fonction pour récupérer un GIF depuis Tenor via une recherche
 async def get_gif_from_tenor(search_term: str) -> str:
     """Utilise l'API Tenor pour récupérer un GIF basé sur un terme de recherche."""
     url = f"https://api.tenor.com/v1/search?q={search_term}&key={TENOR_API_KEY}&limit=1"
@@ -31,12 +39,6 @@ async def get_gif_from_tenor(search_term: str) -> str:
             data = await response.json()
             gif_url = data['results'][0]['media'][0]['gif']['url']
             return gif_url
-
-async def get_direct_gif(url: str) -> str | None:
-    """Vérifie si l'URL est un GIF valide (se termine par .gif)."""
-    if url.endswith(".gif"):
-        return url
-    return None
 
 @bot.event
 async def on_ready():
