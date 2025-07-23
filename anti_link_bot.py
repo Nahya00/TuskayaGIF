@@ -17,7 +17,7 @@ async def tenor_gif(url: str) -> str | None:
     if not TENOR_KEY or "tenor.com" not in url:
         return None
 
-    gif_id = url.rstrip("/").split("-")[-1]        # …-<ID>
+    gif_id = url.rstrip("/").split("-")[-1]
     if not gif_id.isdigit():
         return None
 
@@ -30,7 +30,8 @@ async def tenor_gif(url: str) -> str | None:
                 if r.status != 200:
                     return None
                 data = await r.json()
-        except Exception:
+        except Exception as e:
+            print(f"[Tenor API] Erreur : {e}")
             return None
 
     return (
@@ -57,25 +58,21 @@ async def on_message(msg):
     if not any(url.split("/")[2].endswith(d) for d in GIF_SITES):
         return
 
-    # Tenor : essaie d’obtenir l’URL GIF directe
+    # Tenor : essaie d’obtenir le lien direct
     direct = await tenor_gif(url) if "tenor.com" in url else url
-    direct = direct or url    # fallback si API échoue
+    direct = direct or url
 
+    # Supprimer le message original (optionnel)
+    # essaie d’abord, ignore si pas les permissions
     try:
         await msg.delete()
     except discord.Forbidden:
         pass
 
-    embed = discord.Embed(description="\u200b",
-                          color=discord.Color.dark_blue())
-    embed.set_author(name=str(msg.author),
-                     icon_url=msg.author.display_avatar.url)
-    embed.set_image(url=direct)
-
+    # Réenvoi simple du lien direct
     try:
-        await msg.channel.send(embed=embed)
+        await msg.channel.send(f"{direct}")
     except discord.Forbidden:
-        pass   # manque “Intégrer des liens” au bot ; ajoute-lui la permission
+        pass
 
-bot.run(TOKEN)
 
