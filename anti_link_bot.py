@@ -23,7 +23,7 @@ URL_RE = re.compile(r"https?://\S+")
 
 async def get_gif_from_tenor(search_term: str) -> str:
     """Utilise l'API Tenor pour récupérer un GIF basé sur un terme de recherche."""
-    url = f"https://api.tenor.com/v1/search?q={search_term}&key={TENOR_API_KEY}&limit=1"
+    url = f"https://api.tenor.com/v1/search?q={search_term}&key={TENOR_KEY}&limit=1"
     
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
