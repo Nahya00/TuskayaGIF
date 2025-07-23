@@ -1,20 +1,25 @@
-# bot.py
-import discord, os, re, aiohttp
 
+import discord, os, re, aiohttp, mimetypes
+from io import BytesIO
+
+# Tokens clés via variables d'environnement
 TOKEN      = os.getenv("DISCORD_TOKEN")
-TENOR_KEY  = os.getenv("TENOR_KEY")          # clé Tenor v2
-GIF_DOMAINS = ("tenor.com", "media.tenor.com",
-               "giphy.com", "media.giphy.com")
+TENOR_KEY  = os.getenv("TENOR_KEY")      # facultatif mais recommandé
+
+# Configuration
+MAX_BYTES  = 8 * 1024 * 1024             # 8 Mo (augmente si Nitro / Boost)
+DOMAINS    = ("tenor.com", "media.tenor.com",
+              "giphy.com", "media.giphy.com")
 
 intents = discord.Intents.default()
 intents.messages = True
-intents.message_content = True      # ← OBLIGATOIRE (et activé dans le portail)
+intents.message_content = True          # activer dans le portail Discord
 bot = discord.Client(intents=intents)
 
 URL_RE = re.compile(r"https?://\S+")
 
-# ───── helper : URL .gif via l’API Tenor ─────────────────────────────────
-async def tenor_gif(url: str) -> str | None:
+# ── Tenor API pour lien .gif direct ────────────────────────────────
+async def tenor_api_gif(url: str) -> str | None:
     if not TENOR_KEY or "tenor.com" not in url:
         return None
     gif_id = url.rstrip("/").split("-")[-1]
@@ -37,55 +42,81 @@ async def tenor_gif(url: str) -> str | None:
             .get("url")
     )
 
-# ───── on_message ───────────────────────────────────────────────────────
+# ── Téléchargement (GIF ou MP4) ───────────────────────────────────
+async def fetch_file(url: str):
+    async with aiohttp.ClientSession() as s:
+        try:
+            async with s.get(url, timeout=10) as r:
+                if r.status != 200:
+                    return None, None
+                data = await r.read()
+                if len(data) > MAX_BYTES:
+                    return None, None
+                ctype = r.headers.get("content-type", "").split(";")[0]
+                if not (ctype.startswith("image/") or ctype == "video/mp4"):
+                    return None, None
+                ext = mimetypes.guess_extension(ctype) or ".gif"
+                return data, ext.lstrip(".")
+        except Exception:
+            return None, None
+
+# ── Extraction du lien dans message ou embeds ────────────────────
+def extract_link(msg: discord.Message) -> str | None:
+    m = URL_RE.search(msg.content)
+    if m and any(m.group(0).split('/')[2].endswith(d) for d in DOMAINS):
+        return m.group(0)
+    for emb in msg.embeds:
+        if emb.url and any(emb.url.split('/')[2].endswith(d) for d in DOMAINS):
+            return emb.url
+        if emb.thumbnail and emb.thumbnail.url:
+            thumb = emb.thumbnail.url
+            if any(thumb.split('/')[2].endswith(d) for d in DOMAINS):
+                return thumb
+    return None
+
+# ── Events ───────────────────────────────────────────────────────
 @bot.event
-async def on_message(msg):
+async def on_ready():
+    print("Bot connecté :", bot.user)
+
+@bot.event
+async def on_message(msg: discord.Message):
     if msg.author.bot:
         return
 
-    # 1) lien dans le texte
-    url = None
-    m = URL_RE.search(msg.content)
-    if m:
-        url = m.group(0)
-
-    # 2) sinon cherche dans les embeds (GIF “Favoris” mobile/desktop)
-    if not url and msg.embeds:
-        for emb in msg.embeds:
-            # « gifv » ou « image » : emb.url pointe vers Tenor/Giphy
-            if emb.url:
-                url = emb.url
-            # parfois seul thumbnail.url contient le lien Tenor
-            elif emb.thumbnail and emb.thumbnail.url:
-                url = emb.thumbnail.url
-            if url:
-                break
-
+    url = extract_link(msg)
     if not url:
-        return                                # rien à faire
-
-    if not any(url.split('/')[2].endswith(d) for d in GIF_DOMAINS):
-        return                                # pas un domaine GIF accepté
-
-    # Tenor ➜ transforme en .gif direct via l’API
-    final = await tenor_gif(url) if "tenor.com" in url else url
-    final = final or url                     # fallback
-
-    # supprime le message d’origine
-    try:
-        await msg.delete()                   # nécessite « Gérer les messages »
-    except discord.Forbidden:
         return
 
-    # renvoie l’embed
+    # ⇢ Option Tenor API pour un .gif fiable
+    if "tenor.com" in url:
+        api_url = await tenor_api_gif(url)
+        if api_url:
+            url = api_url
+
+    # Supprime le message original
+    try:
+        await msg.delete()
+    except discord.Forbidden:
+        return  # pas de permission, on abandonne
+
+    # Télécharge (si <= MAX_BYTES) sinon fallback
+    data, ext = await fetch_file(url)
+
     embed = discord.Embed(description="\u200b", color=discord.Color.dark_blue())
-    embed.set_author(name=str(msg.author),
-                     icon_url=msg.author.display_avatar.url)
-    embed.set_image(url=final)
+    embed.set_author(name=str(msg.author), icon_url=msg.author.display_avatar.url)
 
-    await msg.channel.send(embed=embed)      # nécessite « Intégrer des liens »
+    files = None
+    if data:
+        fname = f"gif.{ext}"
+        files = [discord.File(BytesIO(data), filename=fname)]
+        embed.set_image(url=f"attachment://{fname}")
+    else:
+        embed.set_image(url=url)
 
-# ───── lancement ────────────────────────────────────────────────────────
-bot.run(TOKEN)
+    await msg.channel.send(embed=embed, files=files)
+
+if __name__ == "__main__":
+    bot.run(TOKEN)
 
 
