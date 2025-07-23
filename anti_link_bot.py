@@ -2,7 +2,7 @@ import discord
 import os
 import re
 
-TOKEN     = os.getenv("DISCORD_TOKEN")
+TOKEN = os.getenv("DISCORD_TOKEN")
 GIF_SITES = ("tenor.com", "media.tenor.com", "giphy.com", "media.giphy.com")
 
 intents = discord.Intents.default()
@@ -10,6 +10,7 @@ intents.messages = True
 intents.message_content = True
 bot = discord.Client(intents=intents)
 
+# Expression régulière pour attraper les URLs
 URL_RE = re.compile(r"https?://\S+")
 
 async def get_direct_gif(url: str) -> str | None:
@@ -54,4 +55,3 @@ async def on_message(msg):
         return
 
 bot.run(TOKEN)
-
