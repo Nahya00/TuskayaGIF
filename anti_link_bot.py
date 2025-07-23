@@ -103,7 +103,7 @@ async def on_message(msg: discord.Message):
     # Télécharge (si <= MAX_BYTES) sinon fallback
     data, ext = await fetch_file(url)
 
-    embed = discord.Embed(description="\u200b", color=discord.Color.dark_blue())
+    embed = discord.Embed(description="\u200b", color=discord.Color.black())
     embed.set_author(name=str(msg.author), icon_url=msg.author.display_avatar.url)
 
     files = None
