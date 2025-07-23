@@ -12,11 +12,11 @@ bot = discord.Client(intents=intents)
 
 URL_RE = re.compile(r"https?://\S+")
 
-async def get_direct_gif(url: str) -> str | None:
-    """Vérifie que l'URL est directe et valide pour un GIF."""
+async def get_direct_gif(url: str) -> bool:
+    """Vérifie si l'URL est directe et valide pour un GIF."""
     if url.endswith(".gif"):
-        return url
-    return None
+        return True
+    return False
 
 @bot.event
 async def on_ready():
@@ -33,25 +33,12 @@ async def on_message(msg):
         return
 
     url = m.group(0)
-    direct_url = await get_direct_gif(url)
-
-    if direct_url:
-        # Création de l'embed pour un rendu plus propre
-        embed = discord.Embed(
-            title=f"{msg.author.name} a envoyé un GIF",
-            description=f"Voici le GIF partagé par {msg.author.name}:",
-            color=discord.Color.blue()  # Couleur de l'embed
-        )
-        embed.set_image(url=direct_url)  # Ajout du GIF à l'embed
-        embed.set_footer(text=f"Envoyé par {msg.author.name}", icon_url=msg.author.avatar.url)  # Ajouter un footer avec l'avatar de l'utilisateur
-        
+    if await get_direct_gif(url):
+        # Si c'est un lien vers un GIF, Discord l'affichera automatiquement
         try:
-            await msg.channel.send(embed=embed)
+            await msg.channel.send(f"{msg.author.name} a envoyé un GIF : {url}")
         except discord.Forbidden:
             pass
-    else:
-        # Si ce n'est pas un lien vers un GIF, on ignore
-        return
 
 bot.run(TOKEN)
 
