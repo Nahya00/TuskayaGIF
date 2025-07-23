@@ -41,6 +41,26 @@ async def tenor_gif(url: str) -> str | None:
             .get("url")
     )
 
+async def giphy_gif(url: str) -> str | None:
+    """Retourne l'URL du GIF direct depuis Giphy (ou None)."""
+    if "giphy.com" not in url:
+        return None
+
+    gif_id = url.rstrip("/").split("-")[-1]
+    api = f"https://api.giphy.com/v1/gifs/{gif_id}?api_key={os.getenv('GIPHY_API_KEY')}"
+    
+    async with aiohttp.ClientSession() as s:
+        try:
+            async with s.get(api, timeout=8) as r:
+                if r.status != 200:
+                    return None
+                data = await r.json()
+        except Exception as e:
+            print(f"[Giphy API] Erreur : {e}")
+            return None
+
+    return data.get("data", {}).get("images", {}).get("original", {}).get("url")
+
 @bot.event
 async def on_ready():
     print("Connecté :", bot.user)
@@ -58,12 +78,11 @@ async def on_message(msg):
     if not any(url.split("/")[2].endswith(d) for d in GIF_SITES):
         return
 
-    # Tenor : essaie d’obtenir le lien direct
-    direct = await tenor_gif(url) if "tenor.com" in url else url
+    # Tentative de récupération de GIF direct (Tenor ou Giphy)
+    direct = await tenor_gif(url) if "tenor.com" in url else await giphy_gif(url) if "giphy.com" in url else url
     direct = direct or url
 
     # Supprimer le message original (optionnel)
-    # essaie d’abord, ignore si pas les permissions
     try:
         await msg.delete()
     except discord.Forbidden:
@@ -75,4 +94,5 @@ async def on_message(msg):
     except discord.Forbidden:
         pass
 
+bot.run(TOKEN)
 
