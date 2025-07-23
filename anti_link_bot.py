@@ -36,11 +36,11 @@ async def on_message(msg):
     direct_url = await get_direct_gif(url)
 
     if direct_url:
-        # Crée un embed avec le GIF et mentionne l'utilisateur
+        # Crée un embed avec le GIF et mentionne uniquement le nom de l'utilisateur
         embed = discord.Embed(
             title=f"{msg.author.name} a partagé un GIF !",
             description=f"Voici le GIF envoyé par {msg.author.name}:",
-            color=discord.Color.blue()
+            color=discord.Color.blue()  # Choix de couleur pour l'embed
         )
         embed.set_image(url=direct_url)  # Ajoute le GIF à l'embed
         embed.set_footer(text=f"Envoyé par {msg.author.name}", icon_url=msg.author.avatar.url)  # Ajouter l'avatar de l'utilisateur
@@ -54,8 +54,5 @@ async def on_message(msg):
         return
 
 bot.run(TOKEN)
-
-
-
 
 
