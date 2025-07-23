@@ -3,7 +3,6 @@ import os
 import re
 
 TOKEN = os.getenv("DISCORD_TOKEN")
-GIF_SITES = ("tenor.com", "media.tenor.com", "giphy.com", "media.giphy.com")
 
 intents = discord.Intents.default()
 intents.messages = True
@@ -53,7 +52,7 @@ async def on_message(msg):
         except discord.Forbidden:
             pass
     else:
-        # Si ce n'est pas un lien vers un GIF, on ignore
         return
 
 bot.run(TOKEN)
+
