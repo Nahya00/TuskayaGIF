@@ -3,7 +3,6 @@ import os
 import re
 
 TOKEN = os.getenv("DISCORD_TOKEN")
-GIF_SITES = ("tenor.com", "media.tenor.com", "giphy.com", "media.giphy.com")
 
 intents = discord.Intents.default()
 intents.messages = True
@@ -13,6 +12,7 @@ bot = discord.Client(intents=intents)
 # Expression régulière pour attraper les URLs
 URL_RE = re.compile(r"https?://\S+")
 
+# Fonction pour vérifier si l'URL se termine par .gif
 async def get_direct_gif(url: str) -> str | None:
     """Vérifie si l'URL est un GIF valide (se termine par .gif)."""
     if url.endswith(".gif"):
@@ -28,7 +28,7 @@ async def on_message(msg):
     if msg.author.bot:
         return
 
-    # Recherche des URL dans le message
+    # Recherche des liens dans le message
     m = URL_RE.search(msg.content)
     if not m:
         return
