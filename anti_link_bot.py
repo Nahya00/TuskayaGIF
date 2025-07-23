@@ -27,7 +27,7 @@ async def on_message(msg):
     if msg.author.bot:
         return
 
-    # Recherche des liens dans le message
+    # Recherche des URL dans le message
     m = URL_RE.search(msg.content)
     if not m:
         return
@@ -36,15 +36,25 @@ async def on_message(msg):
     direct_url = await get_direct_gif(url)
 
     if direct_url:
-        # Envoyer directement le GIF avec le nom de l'utilisateur
+        # Crée un embed avec le GIF et mentionne l'utilisateur
+        embed = discord.Embed(
+            title=f"{msg.author.name} a partagé un GIF !",
+            description=f"Voici le GIF envoyé par {msg.author.name}:",
+            color=discord.Color.blue()
+        )
+        embed.set_image(url=direct_url)  # Ajoute le GIF à l'embed
+        embed.set_footer(text=f"Envoyé par {msg.author.name}", icon_url=msg.author.avatar.url)  # Ajouter l'avatar de l'utilisateur
+        
+        # Envoie de l'embed dans le salon
         try:
-            await msg.channel.send(f"{msg.author.name} a partagé un GIF :", file=discord.File(direct_url))
+            await msg.channel.send(embed=embed)  # Envoie le message avec l'embed
         except discord.Forbidden:
             pass
     else:
         return
 
 bot.run(TOKEN)
+
 
 
 
