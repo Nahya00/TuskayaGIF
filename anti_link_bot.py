@@ -1,9 +1,11 @@
-import discord, os, re, aiohttp
+import discord
+import os
+import re
+import aiohttp
 
 TOKEN     = os.getenv("DISCORD_TOKEN")
-TENOR_KEY = os.getenv("TENOR_KEY")          # clé Tenor v2
-GIF_SITES = ("tenor.com", "media.tenor.com",
-             "giphy.com", "media.giphy.com")
+TENOR_KEY = os.getenv("TENOR_KEY")  # clé Tenor v2
+GIF_SITES = ("tenor.com", "media.tenor.com", "giphy.com", "media.giphy.com")
 
 intents = discord.Intents.default()
 intents.messages = True
@@ -48,7 +50,7 @@ async def giphy_gif(url: str) -> str | None:
 
     gif_id = url.rstrip("/").split("-")[-1]
     api = f"https://api.giphy.com/v1/gifs/{gif_id}?api_key={os.getenv('GIPHY_API_KEY')}"
-    
+
     async with aiohttp.ClientSession() as s:
         try:
             async with s.get(api, timeout=8) as r:
@@ -78,7 +80,7 @@ async def on_message(msg):
     if not any(url.split("/")[2].endswith(d) for d in GIF_SITES):
         return
 
-    # Tentative de récupération de GIF direct (Tenor ou Giphy)
+    # Tentative de récupération du lien direct (Tenor ou Giphy)
     direct = await tenor_gif(url) if "tenor.com" in url else await giphy_gif(url) if "giphy.com" in url else url
     direct = direct or url
 
@@ -88,9 +90,13 @@ async def on_message(msg):
     except discord.Forbidden:
         pass
 
-    # Réenvoi simple du lien direct
+    # Afficher qui a envoyé le GIF
+    user_name = msg.author.name
+    user_id = msg.author.id
+
+    # Réenvoyer le GIF et l'identifier avec le nom de l'utilisateur
     try:
-        await msg.channel.send(f"{direct}")
+        await msg.channel.send(f"{user_name} ({user_id}) a envoyé un GIF : {direct}")
     except discord.Forbidden:
         pass
 
