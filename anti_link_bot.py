@@ -1,73 +1,82 @@
-import discord
-import os
-import aiohttp
+import discord, os, re, aiohttp
 
-TOKEN = os.getenv("DISCORD_TOKEN")
-TENOR_API_KEY = os.getenv("TENOR_API_KEY")  # Ta clé Tenor ici
+TOKEN     = os.getenv("DISCORD_TOKEN")
+TENOR_KEY = os.getenv("TENOR_API_KEY")          # clé Tenor v2
+GIF_SITES = ("tenor.com", "media.tenor.com",
+             "giphy.com", "media.giphy.com")
 
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
-intents.message_attachments = True  # Pour détecter les fichiers envoyés
 bot = discord.Client(intents=intents)
 
-async def get_gif_from_tenor(search_term: str) -> str | None:
-    """Recherche un GIF sur Tenor via API et renvoie l'URL GIF."""
-    url = f"https://tenor.googleapis.com/v2/search?q={search_term}&key={TENOR_API_KEY}&limit=1&media_filter=gif"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            if response.status != 200:
-                return None
-            data = await response.json()
-            if "results" in data and len(data["results"]) > 0:
-                return data["results"][0]["media_formats"]["gif"]["url"]
+URL_RE = re.compile(r"https?://\S+")
+
+async def tenor_gif(url: str) -> str | None:
+    """Renvoie le .gif direct avec la clé Tenor (ou None)."""
+    if not TENOR_API_KEY or "tenor.com" not in url:
+        return None
+
+    gif_id = url.rstrip("/").split("-")[-1]        # …-<ID>
+    if not gif_id.isdigit():
+        return None
+
+    api = (f"https://tenor.googleapis.com/v2/posts"
+           f"?ids={gif_id}&key={TENOR_API_KEY}&media_filter=gif")
+
+    async with aiohttp.ClientSession() as s:
+        try:
+            async with s.get(api, timeout=8) as r:
+                if r.status != 200:
+                    return None
+                data = await r.json()
+        except Exception:
             return None
+
+    return (
+        data.get("results", [{}])[0]
+            .get("media_formats", {})
+            .get("gif", {})
+            .get("url")
+    )
 
 @bot.event
 async def on_ready():
-    print(f"Bot connecté : {bot.user}")
+    print("Connecté :", bot.user)
 
 @bot.event
-async def on_message(message):
-    if message.author.bot:
+async def on_message(msg):
+    if msg.author.bot:
         return
 
-    # On vérifie si message contient des fichiers joints (attachments)
-    if message.attachments:
-        for attachment in message.attachments:
-            if attachment.filename.lower().endswith(".gif"):
-                embed = discord.Embed(
-                    title=f"{message.author.name} a partagé un GIF !",
-                    description=f"Voici un GIF envoyé par {message.author.name}:",
-                    color=discord.Color.blue()
-                )
-                embed.set_image(url=attachment.url)
-                embed.set_footer(text=f"Envoyé par {message.author.name}", icon_url=message.author.display_avatar.url)
-                try:
-                    await message.channel.send(embed=embed)
-                except discord.Forbidden:
-                    pass
-                return  # Stop après premier GIF trouvé
+    m = URL_RE.search(msg.content)
+    if not m:
+        return
 
-    # Si pas de GIF en attachment, on peut gérer un trigger pour rechercher un GIF Tenor
-    # Par exemple si message commence par "!gif <mot>"
-    if message.content.startswith("!gif "):
-        search_term = message.content[5:]
-        gif_url = await get_gif_from_tenor(search_term)
-        if gif_url:
-            embed = discord.Embed(
-                title=f"{message.author.name} a demandé un GIF Tenor !",
-                description=f"Résultat pour : {search_term}",
-                color=discord.Color.purple()
-            )
-            embed.set_image(url=gif_url)
-            embed.set_footer(text=f"Demandé par {message.author.name}", icon_url=message.author.display_avatar.url)
-            try:
-                await message.channel.send(embed=embed)
-            except discord.Forbidden:
-                pass
-        else:
-            await message.channel.send("Désolé, aucun GIF trouvé pour cette recherche.")
+    url = m.group(0)
+    if not any(url.split("/")[2].endswith(d) for d in GIF_SITES):
+        return
+
+    # Tenor : essaie d’obtenir l’URL GIF directe
+    direct = await tenor_gif(url) if "tenor.com" in url else url
+    direct = direct or url    # fallback si API échoue
+
+    try:
+        await msg.delete()
+    except discord.Forbidden:
+        pass
+
+    embed = discord.Embed(description="\u200b",
+                          color=discord.Color.dark_blue())
+    embed.set_author(name=str(msg.author),
+                     icon_url=msg.author.display_avatar.url)
+    embed.set_image(url=direct)
+
+    try:
+        await msg.channel.send(embed=embed)
+    except discord.Forbidden:
+        pass   # manque “Intégrer des liens” au bot ; ajoute-lui la permission
 
 bot.run(TOKEN)
+
 
